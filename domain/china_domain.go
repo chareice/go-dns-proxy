@@ -22,13 +22,15 @@ type ChinaDomainService struct {
 	cacheFile      string
 	cache          map[string]bool
 	writeCacheChan chan cacheResult
+	cacheInterval  int
 }
 
-func NewChinaDomainService(apiKey string, beianCacheFile string) *ChinaDomainService {
+func NewChinaDomainService(apiKey string, beianCacheFile string, cacheInterval int) *ChinaDomainService {
 	service := &ChinaDomainService{
 		apiKey:         apiKey,
 		cacheFile:      beianCacheFile,
 		writeCacheChan: make(chan cacheResult),
+		cacheInterval:  cacheInterval,
 	}
 
 	service.initCache()
@@ -61,9 +63,6 @@ func (s *ChinaDomainService) initCache() {
 		defer f.Close()
 
 		for {
-			time.Sleep(1 * time.Minute)
-
-			fmt.Printf("当前cache: %v\n", s.cache)
 			data, err := json.Marshal(&s.cache)
 
 			if err != nil {
@@ -75,6 +74,8 @@ func (s *ChinaDomainService) initCache() {
 			if err != nil {
 				log.Println("写入缓存文件失败")
 			}
+
+			time.Sleep(time.Duration(s.cacheInterval) * time.Second)
 		}
 	}()
 

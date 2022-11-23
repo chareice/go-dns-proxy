@@ -79,10 +79,9 @@ func HandleOverseaDNSQuery(m dnsmessage.Message) ([]byte, error) {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", "https://1.1.1.1/dns-query", bytes.NewBuffer(dnsMessage))
+	req, err := http.NewRequest("POST", "https://8.8.8.8/dns-query", bytes.NewBuffer(dnsMessage))
 	if err != nil {
 		return nil, err
-
 	}
 
 	req.Header.Set("Content-Type", "application/dns-message")

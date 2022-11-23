@@ -14,7 +14,7 @@ func main() {
 				Flags: []cli.Flag{
 					&cli.IntFlag{
 						Name:     "port",
-						Usage:    "dns server listen port",
+						Usage:    "dns server port",
 						Required: true,
 					},
 					&cli.StringFlag{
@@ -27,14 +27,34 @@ func main() {
 						Usage:    "备案鉴定的缓存文件地址",
 						Required: true,
 					},
+					&cli.IntFlag{
+						Name:  "cacheInterval",
+						Usage: "备案缓存写入间隔",
+						Value: 10,
+					},
+					&cli.StringFlag{
+						Name:  "chinaDOHServerUrl",
+						Usage: "国内DOH服务地址",
+						Value: "https://120.53.53.53/dns-query",
+					},
+
+					&cli.StringFlag{
+						Name:  "overSeaDOHServerUrl",
+						Usage: "海外DOH服务地址",
+						Value: "https://1.1.1.1/dns-query",
+					},
 				},
-				Name:  "china",
-				Usage: "start a china dns server",
+				Name:  "start",
+				Usage: "start a proxy dns server",
 				Action: func(c *cli.Context) error {
-					port := c.Int("port")
-					apiKey := c.String("apiKey")
-					beianCache := c.String("beianCache")
-					dnsServer := server.NewDnsServer(port, apiKey, beianCache)
+					dnsServer := server.NewDnsServer(&server.NewServerOptions{
+						ListenPort:          c.Int("port"),
+						ApiKey:              c.String("apiKey"),
+						BeianCacheFile:      c.String("beianCache"),
+						BeianCacheInterval:  c.Int("cacheInterval"),
+						ChinaDOHServerUrl:   c.String("chinaDOHServerUrl"),
+						OverSeaDOHServerUrl: c.String("overSeaDOHServerUrl"),
+					})
 					dnsServer.Start()
 					return nil
 				},
