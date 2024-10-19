@@ -1,13 +1,13 @@
 package server
 
 import (
-	"fmt"
 	"go-dns-server/client"
 	"go-dns-server/domain"
-	"golang.org/x/net/dns/dnsmessage"
 	"log"
 	"net"
 	"sync"
+
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 type DnsServer struct {
@@ -98,8 +98,6 @@ func (s *DnsServer) handleDNSMessage(senderAddr *net.UDPAddr, m dnsmessage.Messa
 		log.Println(err)
 		return
 	}
-
-	fmt.Println(respM)
 
 	_, err = s.listenConn.WriteToUDP(resp, senderAddr)
 }
