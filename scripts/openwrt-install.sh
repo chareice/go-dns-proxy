@@ -114,7 +114,7 @@ if [ $CHMOD_EXIT_CODE -ne 0 ]; then
 fi
 
 # 停止现有服务
-if [ -f "/etc/init.d/$SERVICE_NAME" ]; then
+if [ -f "/etc/init.d/$SERVICE_NAME" ] && [ -x "/etc/init.d/$SERVICE_NAME" ]; then
     echo "停止现有服务..."
     /etc/init.d/$SERVICE_NAME stop
 fi
