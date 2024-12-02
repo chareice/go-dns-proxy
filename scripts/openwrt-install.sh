@@ -50,7 +50,7 @@ if [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
 fi
 
 # 下载最新版本
-DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$LATEST_VERSION/go-dns-proxy_${LATEST_VERSION}_linux_${ARCH_NAME}.tar.gz"
+DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$LATEST_VERSION/go-dns-proxy_${LATEST_VERSION#v}_linux_${ARCH_NAME}.tar.gz"
 echo "正在下载: $DOWNLOAD_URL"
 
 TMP_DIR=$(mktemp -d)

@@ -16,7 +16,7 @@
 1. 安装：
 
 ```bash
-curl -o /tmp/install.sh https://raw.githubusercontent.com/chareice/go-dns-proxy/main/scripts/openwrt-install.sh && chmod +x /tmp/install.sh && /tmp/install.sh
+export url='https://raw.githubusercontent.com/chareice/go-dns-proxy/main/scripts' && sh -c "$(curl -kfsSl $url/openwrt-install.sh)"
 ```
 
 2. 配置服务：
