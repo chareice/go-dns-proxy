@@ -135,20 +135,17 @@ EOF
 # 设置权限
 chmod +x "/etc/init.d/$SERVICE_NAME"
 
-# 启用并启动服务
-/etc/init.d/$SERVICE_NAME enable
-/etc/init.d/$SERVICE_NAME start
-
 # 清理临时文件
 rm -rf "$TMP_DIR"
 
-echo "安装完成！服务已启动。"
+echo "安装完成！"
 echo "配置文件位置: $CONFIG_DIR/$SERVICE_NAME"
-echo "可以使用以下命令控制服务："
-echo "启动: /etc/init.d/$SERVICE_NAME start"
-echo "停止: /etc/init.d/$SERVICE_NAME stop"
-echo "重启: /etc/init.d/$SERVICE_NAME restart"
 echo ""
-echo "要修改配置，请编辑 $CONFIG_DIR/$SERVICE_NAME 文件"
-echo "特别注意：请设置 beian_api_key 选项为你的 API Key"
-echo "修改配置后需要重启服务才能生效" 
+echo "请按以下步骤操作："
+echo "1. 编辑配置文件：vi $CONFIG_DIR/$SERVICE_NAME"
+echo "2. 启用开机自启：/etc/init.d/$SERVICE_NAME enable"
+echo "3. 启动服务：/etc/init.d/$SERVICE_NAME start"
+echo ""
+echo "其他命令："
+echo "停止服务：/etc/init.d/$SERVICE_NAME stop"
+echo "重启服务：/etc/init.d/$SERVICE_NAME restart" 

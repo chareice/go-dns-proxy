@@ -9,17 +9,40 @@
 - 支持根据备案信息判断国内外分流（需要 API Key）
 - 支持 OpenWrt 自动安装和配置
 
-## 安装和更新
+## 安装和使用
 
 ### OpenWrt
 
-运行以下命令即可完成安装或更新：
+1. 安装：
 
 ```bash
 curl -o /tmp/install.sh https://raw.githubusercontent.com/chareice/go-dns-proxy/main/scripts/openwrt-install.sh && chmod +x /tmp/install.sh && /tmp/install.sh
 ```
 
-脚本会自动检查最新版本并安装。如需更新，只需再次运行相同的命令。
+2. 配置服务：
+
+```bash
+# 编辑配置文件
+vi /etc/config/go-dns-proxy
+
+# 或使用 UCI 命令配置
+uci set go-dns-proxy.main.china_server='114.114.114.114'
+uci set go-dns-proxy.main.oversea_server='8.8.8.8'
+# 如果需要备案查询功能
+uci set go-dns-proxy.main.beian_api_key='your_api_key'
+uci commit go-dns-proxy
+```
+
+3. 启动服务：
+
+```bash
+# 启用开机自启
+/etc/init.d/go-dns-proxy enable
+# 启动服务
+/etc/init.d/go-dns-proxy start
+```
+
+如需更新，只需再次运行安装命令即可。
 
 ### 手动安装
 
@@ -64,33 +87,6 @@ config go-dns-proxy 'main'
 
     # 备案信息缓存写入间隔（秒）
     option beian_cache_interval '10'
-```
-
-### 修改配置
-
-1. 直接编辑配置文件：
-
-```bash
-vi /etc/config/go-dns-proxy
-```
-
-2. 使用 UCI 命令：
-
-```bash
-# 修改国内 DNS 服务器
-uci set go-dns-proxy.main.china_server='114.114.114.114'
-
-# 修改海外 DNS 服务器
-uci set go-dns-proxy.main.oversea_server='8.8.8.8'
-
-# 设置备案 API Key
-uci set go-dns-proxy.main.beian_api_key='your_api_key'
-
-# 保存更改
-uci commit go-dns-proxy
-
-# 重启服务
-/etc/init.d/go-dns-proxy restart
 ```
 
 ### 服务控制
