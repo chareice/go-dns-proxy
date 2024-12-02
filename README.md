@@ -108,6 +108,21 @@ config go-dns-proxy 'main'
 /etc/init.d/go-dns-proxy disable
 ```
 
+### 诊断调试
+
+如果遇到问题，可以运行以下命令测试上游 DNS 服务器的连通性：
+
+```bash
+export url='https://raw.githubusercontent.com/chareice/go-dns-proxy/main/scripts' && sh -c "$(curl -kfsSl $url/openwrt-debug.sh)"
+```
+
+诊断工具会：
+
+1. 测试国内 DNS 服务器连通性（使用 www.baidu.com 作为测试域名）
+2. 测试海外 DNS 服务器连通性（使用 www.google.com 作为测试域名）
+3. 自动识别普通 DNS 和 DOH 服务器
+4. 在连接失败时提供可能的原因
+
 ## 工作原理
 
 1. 不使用备案 API Key 时：
