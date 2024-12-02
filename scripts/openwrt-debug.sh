@@ -21,7 +21,6 @@ get_config() {
 test_dns() {
     local server=$1
     local domain=$2
-    local timeout=2
     
     echo "测试 DNS 服务器: $server"
     echo "测试域名: $domain"
@@ -34,7 +33,7 @@ test_dns() {
     fi
     
     # 使用 nslookup 测试
-    result=$(nslookup -timeout=$timeout "$domain" "$server" 2>&1)
+    result=$(nslookup "$domain" "$server" 2>&1)
     if echo "$result" | grep -q "connection timed out"; then
         echo "❌ 连接超时"
         echo "   可能原因："
