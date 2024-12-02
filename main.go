@@ -33,15 +33,14 @@ func main() {
 						Value: 10,
 					},
 					&cli.StringFlag{
-						Name:  "chinaDOHServerUrl",
-						Usage: "国内DOH服务地址",
-						Value: "https://120.53.53.53/dns-query",
+						Name:  "chinaServer",
+						Usage: "国内 DNS 服务地址（支持普通 DNS 和 DOH）",
+						Value: "120.53.53.53",
 					},
-
 					&cli.StringFlag{
-						Name:  "overSeaDOHServerUrl",
-						Usage: "海外DOH服务地址",
-						Value: "https://1.1.1.1/dns-query",
+						Name:  "overSeaServer",
+						Usage: "海外 DNS 服务地址（支持普通 DNS 和 DOH）",
+						Value: "1.1.1.1",
 					},
 				},
 				Name:  "start",
@@ -52,8 +51,8 @@ func main() {
 						ApiKey:              c.String("apiKey"),
 						BeianCacheFile:      c.String("beianCache"),
 						BeianCacheInterval:  c.Int("cacheInterval"),
-						ChinaDOHServerUrl:   c.String("chinaDOHServerUrl"),
-						OverSeaDOHServerUrl: c.String("overSeaDOHServerUrl"),
+						ChinaServerAddr:     c.String("chinaServer"),
+						OverSeaServerAddr:   c.String("overSeaServer"),
 					})
 					dnsServer.Start()
 					return nil

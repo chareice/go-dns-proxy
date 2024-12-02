@@ -5,6 +5,7 @@ import (
 	"go-dns-server/domain"
 	"log"
 	"net"
+	"strings"
 	"sync"
 
 	"golang.org/x/net/dns/dnsmessage"
@@ -13,8 +14,8 @@ import (
 type DnsServer struct {
 	listenConn *net.UDPConn
 
-	chinaDOHClient     *client.DOHClient
-	overseaDOHClient   *client.DOHClient
+	chinaResolver     client.DNSResolver
+	overseaResolver   client.DNSResolver
 	chinaDomainService *domain.ChinaDomainService
 	mu                 sync.RWMutex
 }
@@ -23,8 +24,8 @@ type NewServerOptions struct {
 	ListenPort          int
 	BeianCacheFile      string
 	BeianCacheInterval  int
-	ChinaDOHServerUrl   string
-	OverSeaDOHServerUrl string
+	ChinaServerAddr     string
+	OverSeaServerAddr   string
 	ApiKey              string
 }
 
@@ -35,10 +36,38 @@ func NewDnsServer(options *NewServerOptions) *DnsServer {
 		log.Fatal(err)
 	}
 
+	var chinaResolver, overseaResolver client.DNSResolver
+
+	// 通过检查地址是否包含 http 来判断是否使用 DOH
+	isChinaDOH := strings.Contains(strings.ToLower(options.ChinaServerAddr), "http")
+	isOverseaDOH := strings.Contains(strings.ToLower(options.OverSeaServerAddr), "http")
+
+	// 处理中国服务器
+	if isChinaDOH {
+		chinaResolver = client.NewDOHClient(options.ChinaServerAddr)
+	} else {
+		chinaAddr := options.ChinaServerAddr
+		if !strings.Contains(chinaAddr, ":") {
+			chinaAddr = chinaAddr + ":53"
+		}
+		chinaResolver = client.NewDNSClient(chinaAddr)
+	}
+
+	// 处理海外服务器
+	if isOverseaDOH {
+		overseaResolver = client.NewDOHClient(options.OverSeaServerAddr)
+	} else {
+		overseaAddr := options.OverSeaServerAddr
+		if !strings.Contains(overseaAddr, ":") {
+			overseaAddr = overseaAddr + ":53"
+		}
+		overseaResolver = client.NewDNSClient(overseaAddr)
+	}
+
 	return &DnsServer{
 		listenConn:         conn,
-		chinaDOHClient:     client.NewDOHClient(options.ChinaDOHServerUrl),
-		overseaDOHClient:   client.NewDOHClient(options.OverSeaDOHServerUrl),
+		chinaResolver:      chinaResolver,
+		overseaResolver:    overseaResolver,
 		chinaDomainService: domain.NewChinaDomainService(options.ApiKey, options.BeianCacheFile, options.BeianCacheInterval),
 	}
 }
@@ -75,15 +104,15 @@ func (s *DnsServer) handleDNSMessage(senderAddr *net.UDPAddr, m dnsmessage.Messa
 	queryQuestion := m.Questions[0]
 	domainName := queryQuestion.Name
 
-	var dohClient *client.DOHClient
+	var resolver client.DNSResolver
 
-	dohClient = s.overseaDOHClient
+	resolver = s.overseaResolver
 
 	if s.chinaDomainService.IsChinaDomain(domainName.String()) {
-		dohClient = s.chinaDOHClient
+		resolver = s.chinaResolver
 	}
 
-	resp, err := dohClient.Request(m)
+	resp, err := resolver.Request(m)
 
 	if err != nil {
 		log.Println(err)
