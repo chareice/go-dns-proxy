@@ -2,21 +2,37 @@ package domain
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"go-dns-proxy/admin"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestChinaDomainService_IsChinaDomain(t *testing.T) {
-	// 创建临时缓存文件
-	tmpfile, err := os.CreateTemp("", "beian_cache_*.json")
+func setupTestDB(t *testing.T) *sql.DB {
+	// 创建临时数据库文件
+	tmpDir, err := os.MkdirTemp("", "dns_test_*")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpfile.Name())
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := admin.InitDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	return db
+}
+
+func TestChinaDomainService_IsChinaDomain(t *testing.T) {
+	db := setupTestDB(t)
 
 	// 创建 mock HTTP 服务器
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -32,14 +48,14 @@ func TestChinaDomainService_IsChinaDomain(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	service := NewChinaDomainService("test_api_key", tmpfile.Name(), 10)
+	service := NewChinaDomainService("test_api_key", db)
 	// 修改备案查询 URL 为 mock 服务器地址
 	service.beianAPIURL = mockServer.URL
 
 	tests := []struct {
 		name   string
-		domain string
-		want   bool
+			domain string
+			want   bool
 	}{
 		{
 			name:   "Test .cn domain",
@@ -94,12 +110,7 @@ func TestChinaDomainService_IsChinaDomain(t *testing.T) {
 }
 
 func TestChinaDomainService_Cache(t *testing.T) {
-	// 创建临时缓存文件
-	tmpfile, err := os.CreateTemp("", "beian_cache_*.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
+	db := setupTestDB(t)
 
 	// 创建 mock HTTP 服务器
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +123,7 @@ func TestChinaDomainService_Cache(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	service := NewChinaDomainService("test_api_key", tmpfile.Name(), 1)
+	service := NewChinaDomainService("test_api_key", db)
 	service.beianAPIURL = mockServer.URL
 
 	// 测试缓存写入和读取
@@ -133,16 +144,16 @@ func TestChinaDomainService_Cache(t *testing.T) {
 		}
 
 		// 验证缓存
-		if cached, ok := service.cache[d.domain]; !ok || cached != d.want {
-			t.Errorf("Cache for %s = %v, want %v", d.domain, cached, d.want)
+		if isBeian, found := admin.GetBeianCache(db, d.domain); !found || isBeian != d.want {
+			t.Errorf("Cache for %s = %v, want %v", d.domain, isBeian, d.want)
 		}
 	}
 
 	// 测试缓存持久化
-	service2 := NewChinaDomainService("test_api_key", tmpfile.Name(), 1)
+	service2 := NewChinaDomainService("test_api_key", db)
 	for _, d := range domains {
-		if cached, ok := service2.cache[d.domain]; !ok || cached != d.want {
-			t.Errorf("Persisted cache for %s = %v, want %v", d.domain, cached, d.want)
+		if isBeian, found := admin.GetBeianCache(db, d.domain); !found || isBeian != d.want {
+			t.Errorf("Persisted cache for %s = %v, want %v", d.domain, isBeian, d.want)
 		}
 	}
 } 

@@ -160,4 +160,8 @@ func (c *DOTClient) Request(ctx context.Context, m dnsmessage.Message) ([]byte, 
 	}
 
 	return response, nil
+}
+
+func (c *DOTClient) String() string {
+	return "tls://" + c.serverAddr
 } 

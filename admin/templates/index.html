@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DNS 代理管理</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+  </head>
+  <body class="bg-gray-50 min-h-screen">
+    <!-- 顶部导航栏 -->
+    <nav class="bg-white shadow-sm">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16">
+          <div class="flex items-center">
+            <span class="text-lg font-semibold text-gray-800"
+              >DNS 代理管理系统</span
+            >
+          </div>
+          <div class="flex items-center space-x-4">
+            <span id="status" class="flex items-center">
+              <span class="h-2 w-2 rounded-full bg-gray-400 mr-2"></span>
+              <span class="text-sm text-gray-600">连接中...</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- 主要内容区域 -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- 统计卡片 -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow-sm p-6">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-medium text-gray-500">今日总查询</h3>
+            <svg
+              class="h-5 w-5 text-blue-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+              ></path>
+            </svg>
+          </div>
+          <p
+            id="totalQueries"
+            class="mt-2 text-3xl font-semibold text-gray-900"
+          >
+            0
+          </p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm p-6">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-medium text-gray-500">国内 DNS 查询</h3>
+            <svg
+              class="h-5 w-5 text-green-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"
+              ></path>
+            </svg>
+          </div>
+          <p
+            id="chinaDNSQueries"
+            class="mt-2 text-3xl font-semibold text-gray-900"
+          >
+            0
+          </p>
+        </div>
+        <div class="bg-white rounded-lg shadow-sm p-6">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-medium text-gray-500">海外 DNS 查询</h3>
+            <svg
+              class="h-5 w-5 text-yellow-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              ></path>
+            </svg>
+          </div>
+          <p
+            id="overseaDNSQueries"
+            class="mt-2 text-3xl font-semibold text-gray-900"
+          >
+            0
+          </p>
+        </div>
+      </div>
+
+      <!-- 图表和日志区域 -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- 查询统计图表 -->
+        <div class="bg-white rounded-lg shadow-sm p-6">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-lg font-medium text-gray-900">查询统计</h2>
+            <div class="flex items-center space-x-2">
+              <button
+                onclick="fetchLastHourStats()"
+                class="px-3 py-1.5 bg-blue-50 text-blue-600 text-sm font-medium rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                最近一小时
+              </button>
+              <button
+                onclick="fetchTodayStats()"
+                class="px-3 py-1.5 bg-blue-50 text-blue-600 text-sm font-medium rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                今日
+              </button>
+            </div>
+          </div>
+          <div class="h-80">
+            <canvas id="queryChart"></canvas>
+          </div>
+        </div>
+
+        <!-- 查询日志 -->
+        <div class="bg-white rounded-lg shadow-sm p-6">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-lg font-medium text-gray-900">查询日志</h2>
+            <button
+              onclick="openQueryLogs()"
+              class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              查看详细日志
+              <svg
+                class="ml-2 -mr-0.5 h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 5l7 7-7 7"
+                ></path>
+              </svg>
+            </button>
+          </div>
+          <div
+            id="recentLogs"
+            class="space-y-4 h-[calc(100%-4rem)] overflow-y-auto"
+          >
+            <!-- 最近日志将在这里动态显示 -->
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- 查询日志弹窗 -->
+    <div
+      id="queryLogsModal"
+      class="fixed inset-0 bg-gray-500 bg-opacity-75 hidden"
+      style="z-index: 50"
+    >
+      <div class="fixed inset-0 overflow-y-auto">
+        <div
+          class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0"
+        >
+          <div
+            class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-4xl"
+          >
+            <div class="bg-white">
+              <div
+                class="flex items-center justify-between p-4 border-b border-gray-200"
+              >
+                <h3 class="text-lg font-medium text-gray-900">查询日志</h3>
+                <button
+                  onclick="closeQueryLogs()"
+                  class="text-gray-400 hover:text-gray-500"
+                >
+                  <svg
+                    class="h-6 w-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M6 18L18 6M6 6l12 12"
+                    ></path>
+                  </svg>
+                </button>
+              </div>
+              <div class="h-[32rem] overflow-y-auto p-4">
+                <div id="queryLogs" class="space-y-4">
+                  <!-- 日志内容将在这里动态显示 -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let ws;
+      let queryChart;
+      let isModalOpen = false;
+
+      // 图表设置
+      function setupChart() {
+        const ctx = document.getElementById("queryChart").getContext("2d");
+        queryChart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: [],
+            datasets: [
+              {
+                label: "总查询",
+                data: [],
+                borderColor: "#3B82F6",
+                backgroundColor: "rgba(59, 130, 246, 0.1)",
+                tension: 0.4,
+                fill: true,
+                order: 3,
+                yAxisID: "y",
+              },
+              {
+                label: "国内DNS",
+                data: [],
+                borderColor: "#10B981",
+                backgroundColor: "rgba(16, 185, 129, 0.1)",
+                tension: 0.4,
+                fill: true,
+                order: 2,
+                yAxisID: "y",
+              },
+              {
+                label: "海外DNS",
+                data: [],
+                borderColor: "#F59E0B",
+                backgroundColor: "rgba(245, 158, 11, 0.1)",
+                tension: 0.4,
+                fill: true,
+                order: 1,
+                yAxisID: "y",
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+              intersect: false,
+              mode: "index",
+            },
+            plugins: {
+              legend: {
+                position: "top",
+                labels: {
+                  usePointStyle: true,
+                  padding: 20,
+                  font: {
+                    family:
+                      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                  },
+                },
+              },
+              tooltip: {
+                mode: "index",
+                intersect: false,
+                backgroundColor: "rgba(255, 255, 255, 0.9)",
+                titleColor: "#1F2937",
+                bodyColor: "#4B5563",
+                borderColor: "#E5E7EB",
+                borderWidth: 1,
+                padding: 12,
+                bodyFont: {
+                  family:
+                    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                },
+                titleFont: {
+                  family:
+                    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                  weight: "600",
+                },
+              },
+            },
+            scales: {
+              x: {
+                grid: {
+                  display: false,
+                },
+                ticks: {
+                  font: {
+                    family:
+                      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                  },
+                },
+              },
+              y: {
+                beginAtZero: true,
+                grid: {
+                  color: "rgba(243, 244, 246, 1)",
+                  drawBorder: false,
+                },
+                ticks: {
+                  stepSize: 1,
+                  precision: 0,
+                  font: {
+                    family:
+                      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                  },
+                },
+              },
+            },
+          },
+        });
+      }
+
+      // WebSocket 连接
+      function connectWebSocket() {
+        ws = new WebSocket("ws://" + window.location.host + "/ws");
+
+        ws.onopen = function () {
+          console.log("WebSocket connected");
+          document.getElementById("status").innerHTML = `
+            <span class="h-2 w-2 rounded-full bg-green-400 mr-2"></span>
+            <span class="text-sm text-gray-600">已连接</span>
+          `;
+          // WebSocket 连接成功后立即请求统计数据
+          fetchLastHourStats();
+          fetchTodayStats();
+        };
+
+        ws.onclose = function () {
+          console.log("WebSocket disconnected");
+          document.getElementById("status").innerHTML = `
+            <span class="h-2 w-2 rounded-full bg-red-400 mr-2"></span>
+            <span class="text-sm text-gray-600">已断开</span>
+          `;
+          setTimeout(connectWebSocket, 1000);
+        };
+
+        ws.onerror = function (error) {
+          console.error("WebSocket error:", error);
+        };
+
+        ws.onmessage = function (evt) {
+          try {
+            const data = JSON.parse(evt.data);
+            console.log("Received WebSocket message:", data); // 调试日志
+
+            switch (data.type) {
+              case "stats":
+                updateStats(data.data);
+                break;
+              case "queries":
+                updateQueries(data.data);
+                break;
+              case "today_stats":
+                updateTodayStats(data.data);
+                break;
+              case "log":
+                if (isModalOpen) {
+                  appendLog(data.data);
+                }
+                appendRecentLog(data.data);
+                break;
+              case "error":
+                console.error("Server error:", data.data.message);
+                break;
+            }
+          } catch (e) {
+            console.error("Error processing WebSocket message:", e);
+          }
+        };
+      }
+
+      // 更新今日统计数据
+      function updateTodayStats(stats) {
+        if (!stats || !Array.isArray(stats)) {
+          console.log("Invalid today stats data:", stats);
+          return;
+        }
+
+        // 计算总数
+        const totals = stats.reduce(
+          (acc, curr) => ({
+            total: acc.total + (parseInt(curr.total) || 0),
+            china_dns: acc.china_dns + (parseInt(curr.china_dns) || 0),
+            oversea_dns: acc.oversea_dns + (parseInt(curr.oversea_dns) || 0),
+          }),
+          { total: 0, china_dns: 0, oversea_dns: 0 }
+        );
+
+        // 更新统计卡片
+        document.getElementById("totalQueries").textContent = totals.total;
+        document.getElementById("chinaDNSQueries").textContent =
+          totals.china_dns;
+        document.getElementById("overseaDNSQueries").textContent =
+          totals.oversea_dns;
+      }
+
+      // 查询日志相关变量
+      let currentPage = 1;
+      const pageSize = 10;
+      let totalPages = 1;
+      let currentLogs = [];
+
+      // 更新查询列表
+      function updateQueries(queries) {
+        if (!queries || !queries.length) return;
+
+        currentLogs = queries;
+        totalPages = Math.ceil(queries.length / pageSize);
+        updatePagination();
+        renderCurrentPage();
+      }
+
+      // 渲染当前页的日志
+      function renderCurrentPage() {
+        const recentLogs = document.getElementById("recentLogs");
+        recentLogs.innerHTML = ""; // 清空现有内容
+
+        const start = (currentPage - 1) * pageSize;
+        const end = start + pageSize;
+        const pageQueries = currentLogs.slice(start, end);
+
+        pageQueries.forEach((query) => {
+          const logElement = document.createElement("div");
+          logElement.className =
+            "bg-white rounded-lg border border-gray-100 p-4 cursor-pointer hover:bg-gray-50";
+          logElement.onclick = () => showQueryDetail(query);
+
+          const statusColor =
+            query.response_code === 0 ? "text-green-500" : "text-red-500";
+          const statusIcon = query.response_code === 0 ? "✓" : "✗";
+
+          logElement.innerHTML = `
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <span class="${statusColor} text-sm">${statusIcon}</span>
+                <span class="text-gray-900 font-medium">${query.domain}</span>
+                <span class="text-gray-500 text-sm">${query.query_type}</span>
+              </div>
+              <div class="flex items-center space-x-3">
+                <span class="text-gray-400 text-sm">${moment(
+                  query.created_at
+                ).format("HH:mm:ss")}</span>
+                <span class="text-gray-500 text-sm">${
+                  query.is_china_dns ? "国内DNS" : "海外DNS"
+                }</span>
+              </div>
+            </div>
+            <div class="mt-2 text-sm text-gray-600">
+              <span class="text-gray-400">客户端:</span> ${query.client_ip}
+              <span class="text-gray-400 ml-3">服务器:</span> ${query.server}
+              <span class="text-gray-400 ml-3">耗时:</span> ${
+                query.total_time_ms
+              }ms
+            </div>
+          `;
+
+          recentLogs.appendChild(logElement);
+        });
+      }
+
+      // 更新分页控件
+      function updatePagination() {
+        const pagination = document.getElementById("pagination");
+        if (!pagination) return;
+
+        let paginationHtml = `
+          <div class="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6">
+            <div class="flex flex-1 justify-between sm:hidden">
+              <button onclick="changePage(${
+                currentPage - 1
+              })" class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 ${
+          currentPage === 1 ? "opacity-50 cursor-not-allowed" : ""
+        }">上一页</button>
+              <button onclick="changePage(${
+                currentPage + 1
+              })" class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 ${
+          currentPage === totalPages ? "opacity-50 cursor-not-allowed" : ""
+        }">下一页</button>
+            </div>
+            <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+              <div>
+                <p class="text-sm text-gray-700">
+                  显示第 <span class="font-medium">${
+                    (currentPage - 1) * pageSize + 1
+                  }</span> 到 <span class="font-medium">${Math.min(
+          currentPage * pageSize,
+          currentLogs.length
+        )}</span> 条，共 <span class="font-medium">${
+          currentLogs.length
+        }</span> 条
+                </p>
+              </div>
+              <div>
+                <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                  <button onclick="changePage(${
+                    currentPage - 1
+                  })" class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 ${
+          currentPage === 1 ? "opacity-50 cursor-not-allowed" : ""
+        }">
+                    <span class="sr-only">上一页</span>
+                    <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
+                    </svg>
+                  </button>
+                  ${generatePageButtons()}
+                  <button onclick="changePage(${
+                    currentPage + 1
+                  })" class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 ${
+          currentPage === totalPages ? "opacity-50 cursor-not-allowed" : ""
+        }">
+                    <span class="sr-only">下一页</span>
+                    <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                    </svg>
+                  </button>
+                </nav>
+              </div>
+            </div>
+          </div>
+        `;
+        pagination.innerHTML = paginationHtml;
+      }
+
+      // 生成页码按钮
+      function generatePageButtons() {
+        let buttons = "";
+        for (let i = 1; i <= totalPages; i++) {
+          if (i === currentPage) {
+            buttons += `
+              <button aria-current="page" class="relative z-10 inline-flex items-center bg-indigo-600 px-4 py-2 text-sm font-semibold text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+                ${i}
+              </button>
+            `;
+          } else {
+            buttons += `
+              <button onclick="changePage(${i})" class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0">
+                ${i}
+              </button>
+            `;
+          }
+        }
+        return buttons;
+      }
+
+      // 切换页码
+      function changePage(page) {
+        if (page < 1 || page > totalPages) return;
+        currentPage = page;
+        renderCurrentPage();
+        updatePagination();
+      }
+
+      // 显示查询详情
+      function showQueryDetail(query) {
+        const modal = document.getElementById("queryDetailModal");
+        const modalContent = document.getElementById("queryDetailContent");
+
+        let detailHtml = `
+          <div class="space-y-4">
+            <div class="flex justify-between items-center">
+              <h3 class="text-lg font-medium text-gray-900">查询详情</h3>
+              <button onclick="closeQueryDetailModal()" class="text-gray-400 hover:text-gray-500">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div class="bg-gray-50 p-4 rounded-lg">
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <p class="text-sm font-medium text-gray-500">域名</p>
+                  <p class="mt-1 text-sm text-gray-900">${query.domain}</p>
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-gray-500">查询类型</p>
+                  <p class="mt-1 text-sm text-gray-900">${query.query_type}</p>
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-gray-500">客户端IP</p>
+                  <p class="mt-1 text-sm text-gray-900">${query.client_ip}</p>
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-gray-500">DNS服务器</p>
+                  <p class="mt-1 text-sm text-gray-900">${query.server}</p>
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-gray-500">查询时间</p>
+                  <p class="mt-1 text-sm text-gray-900">${moment(
+                    query.created_at
+                  ).format("YYYY-MM-DD HH:mm:ss")}</p>
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-gray-500">响应时间</p>
+                  <p class="mt-1 text-sm text-gray-900">${
+                    query.total_time_ms
+                  }ms</p>
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-gray-500">DNS类型</p>
+                  <p class="mt-1 text-sm text-gray-900">${
+                    query.is_china_dns ? "国内DNS" : "海外DNS"
+                  }</p>
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-gray-500">响应状态</p>
+                  <p class="mt-1 text-sm text-gray-900 ${
+                    query.response_code === 0
+                      ? "text-green-600"
+                      : "text-red-600"
+                  }">${query.response_code === 0 ? "成功" : "失败"}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        modalContent.innerHTML = detailHtml;
+        modal.classList.remove("hidden");
+        document.body.style.overflow = "hidden";
+      }
+
+      // 关闭查询详情模态框
+      function closeQueryDetailModal() {
+        const modal = document.getElementById("queryDetailModal");
+        modal.classList.add("hidden");
+        document.body.style.overflow = "";
+      }
+
+      // 获取最近一小时统计
+      function fetchLastHourStats() {
+        const end = new Date();
+        const start = new Date(end - 60 * 60 * 1000);
+        console.log("Fetching stats from", start, "to", end); // 调试日志
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          const message = {
+            type: "get_stats",
+            payload: {
+              start: start.toISOString(),
+              end: end.toISOString(),
+            },
+          };
+          console.log("Sending message:", message);
+          ws.send(JSON.stringify(message));
+        } else {
+          console.error("WebSocket is not connected");
+        }
+      }
+
+      // 获取今日统计
+      function fetchTodayStats() {
+        const end = new Date();
+        const start = new Date(end.setHours(0, 0, 0, 0));
+        console.log("Fetching today stats from", start, "to", new Date()); // 调试日志
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          const message = {
+            type: "get_today_stats",
+            payload: {
+              start: start.toISOString(),
+              end: new Date().toISOString(),
+            },
+          };
+          console.log("Sending message:", message);
+          ws.send(JSON.stringify(message));
+        } else {
+          console.error("WebSocket is not connected");
+        }
+      }
+
+      // 添加最近日志
+      function appendRecentLog(log) {
+        const recentLogs = document.getElementById("recentLogs");
+        const logElement = createLogElement(log);
+
+        recentLogs.insertBefore(logElement, recentLogs.firstChild);
+
+        // 保持最近的 5 条日志
+        while (recentLogs.children.length > 5) {
+          recentLogs.removeChild(recentLogs.lastChild);
+        }
+      }
+
+      // 创建日志元素
+      function createLogElement(log) {
+        const div = document.createElement("div");
+        div.className = "bg-white rounded-lg border border-gray-100 p-4";
+
+        const levelColors = {
+          debug: "text-gray-500",
+          info: "text-blue-500",
+          warn: "text-yellow-500",
+          error: "text-red-500",
+        };
+
+        const levelColor =
+          levelColors[log.level.toLowerCase()] || levelColors.info;
+
+        div.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <span class="${levelColor} text-xs font-medium uppercase">${
+          log.level
+        }</span>
+                        <span class="text-gray-400 text-sm">${moment(
+                          log.timestamp
+                        ).format("HH:mm:ss")}</span>
+                    </div>
+                </div>
+                <div class="mt-2 text-sm text-gray-600">${log.message}</div>
+            `;
+
+        return div;
+      }
+
+      // 打开查询日志弹窗
+      function openQueryLogs() {
+        document.getElementById("queryLogsModal").classList.remove("hidden");
+        isModalOpen = true;
+        document.body.style.overflow = "hidden";
+      }
+
+      // 关闭查询日志弹窗
+      function closeQueryLogs() {
+        document.getElementById("queryLogsModal").classList.add("hidden");
+        isModalOpen = false;
+        document.body.style.overflow = "";
+      }
+
+      // 添加日志
+      function appendLog(log) {
+        const queryLogs = document.getElementById("queryLogs");
+        const logElement = createLogElement(log);
+        queryLogs.insertBefore(logElement, queryLogs.firstChild);
+      }
+
+      // 初始化
+      document.addEventListener("DOMContentLoaded", function () {
+        console.log("DOM Content Loaded"); // 调试日志
+        setupChart();
+        connectWebSocket();
+      });
+
+      // 添加查询详情模态框到 HTML
+      document.body.insertAdjacentHTML(
+        "beforeend",
+        `
+        <div id="queryDetailModal" class="hidden fixed inset-0 bg-gray-500 bg-opacity-75 overflow-y-auto h-full w-full z-50">
+          <div class="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+            <div id="queryDetailContent"></div>
+          </div>
+        </div>
+      `
+      );
+
+      // 添加分页容器到查询日志列表下方
+      document
+        .getElementById("recentLogs")
+        .insertAdjacentHTML(
+          "afterend",
+          '<div id="pagination" class="mt-4"></div>'
+        );
+    </script>
+  </body>
+</html>

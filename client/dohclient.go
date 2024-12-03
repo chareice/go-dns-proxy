@@ -100,3 +100,7 @@ func (c *DOHClient) Request(ctx context.Context, m dnsmessage.Message) ([]byte, 
 
 	return body, nil
 }
+
+func (c *DOHClient) String() string {
+	return c.serverAddr
+}

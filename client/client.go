@@ -8,4 +8,5 @@ import (
 
 type DNSResolver interface {
 	Request(ctx context.Context, m dnsmessage.Message) ([]byte, error)
+	String() string
 } 

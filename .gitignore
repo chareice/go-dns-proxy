@@ -1,2 +1,41 @@
 cache.txt
 go-dns-server
+
+# IDE
+.idea/
+.vscode/
+
+# Binary files
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+
+# Testing
+*.test
+*.out
+coverage.txt
+
+# Temporary files
+tmp/
+.DS_Store
+
+# Air hot reload
+tmp/
+
+# Log files
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# Dependencies
+vendor/
+
+# Build output
+dist/
+build/
+data
