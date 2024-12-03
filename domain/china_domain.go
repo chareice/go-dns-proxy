@@ -89,87 +89,78 @@ func (s *ChinaDomainService) cleanCacheRoutine() {
 }
 
 func (s *ChinaDomainService) IsChinaDomain(ctx context.Context, domain string) bool {
-	requestID, _ := ctx.Value(client.RequestIDKey).(string)
+	requestID, _ := ctx.Value(RequestIDKey).(string)
 	logger := log.WithFields(log.Fields{
+		"domain": domain,
 		"requestId": requestID,
-		"domain":    domain,
 	})
-	
+
+	logger.Debug("域名解析")
+	parts := strings.Split(domain, ".")
+	logger = logger.WithField("parts", parts)
+
 	// 移除末尾的点
 	domain = strings.TrimSuffix(domain, ".")
-	parts := strings.Split(domain, ".")
-	if len(parts) < 2 {
-		logger.Debug("域名格式无效")
-		return false
-	}
 
-	logger.WithField("parts", parts).Debug("域名解析")
-
-	// 检查是否是直接的中国域名
-	domainSuffix := parts[len(parts)-1]
-	if domainSuffix == "cn" || domainSuffix == "中国" {
-		logger.Debug("直接匹配中国域名后缀")
+	// 检查是否为中国顶级域名
+	if strings.HasSuffix(domain, ".cn") || strings.HasSuffix(domain, ".中国") {
 		return true
 	}
 
-	// 检查是否是二级中国域名
-	if len(parts) >= 2 {
-		tld := parts[len(parts)-1]          // 顶级域名，如 "com"
-		sld := parts[len(parts)-2]          // 二级域名，如 "taobao"
-		mainDomain := fmt.Sprintf("%s.%s", sld, tld)
-
-		if strings.HasSuffix(domain, ".com.cn") || strings.HasSuffix(domain, ".net.cn") || strings.HasSuffix(domain, ".org.cn") {
-			logger.Debug("匹配二级中国域名后缀")
-			return true
-		}
-
-		if tld == "com" || tld == "net" || tld == "org" {
-			logger.WithFields(log.Fields{
-				"mainDomain": mainDomain,
-				"sld": sld,
-				"tld": tld,
-			}).Debug("检查主域名备案状态")
-			return s.isBeianDomain(ctx, mainDomain)
-		}
-	}
-
-	logger.Debug("非中国域名")
-	return false
-}
-
-func (s *ChinaDomainService) isBeianDomain(ctx context.Context, domain string) bool {
 	// 提取主域名
 	mainDomain := extractMainDomain(domain)
 	if mainDomain == "" {
 		return false
 	}
 
+	logger = logger.WithFields(log.Fields{
+		"mainDomain": mainDomain,
+		"sld": parts[len(parts)-2],
+		"tld": parts[len(parts)-1],
+	})
+	logger.Debug("检查主域名备案状态")
+
 	// 检查缓存
-	if isBeian, _, found := admin.GetBeianCache(s.db, mainDomain); found {
+	var isBeian bool
+	err := s.db.QueryRowContext(ctx, "SELECT is_beian FROM beian_cache WHERE domain = ? AND updated_at > datetime('now', '-24 hours')", mainDomain).Scan(&isBeian)
+	if err == nil {
+		logger.WithFields(log.Fields{
+			"domain": mainDomain,
+			"isBeian": isBeian,
+			"source": "cache",
+		}).Debug("从缓存获取备案状态")
 		return isBeian
 	}
 
-	logger := log.WithFields(log.Fields{
-		"domain":    mainDomain,
-		"requestId": ctx.Value(RequestIDKey),
-	})
+	// 如果没有 API Key，只根据域名后缀判断
+	if s.apiKey == "" {
+		return false
+	}
 
 	logger.Debug("开始查询备案接口")
-
-	// 构建请求URL
+	// 构建 API URL
 	url := fmt.Sprintf("%s?key=%s&domainName=%s", s.beianAPIURL, s.apiKey, mainDomain)
-	logger.WithField("url", url).Debug("备案查询请求")
+	logger = logger.WithFields(log.Fields{
+		"domain": mainDomain,
+		"url": url,
+	})
+	logger.Debug("备案查询请求")
 
-	// 发送请求
+	// 发送 HTTP 请求
 	startTime := time.Now()
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		logger.WithError(err).Error("创建备案查询请求失败")
+		return false
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		logger.WithError(err).Error("备案查询请求失败")
 		return false
 	}
 	defer resp.Body.Close()
 
-	// 读取响应
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.WithError(err).Error("读取备案查询响应失败")
@@ -178,26 +169,38 @@ func (s *ChinaDomainService) isBeianDomain(ctx context.Context, domain string) b
 
 	// 解析响应
 	var result struct {
-		StateCode int         `json:"StateCode"`
-		Reason    string      `json:"Reason"`
-		Result    interface{} `json:"Result"`
+		StateCode int    `json:"StateCode"`
+		Reason    string `json:"Reason"`
+		Result    struct {
+			CompanyName  string `json:"CompanyName"`
+			SiteLicense string `json:"SiteLicense"`
+		} `json:"Result"`
 	}
+
 	if err := json.Unmarshal(body, &result); err != nil {
 		logger.WithError(err).Error("解析备案查询响应失败")
 		return false
 	}
 
 	// 判断是否备案
-	isBeian := result.StateCode == 1 && result.Result != nil
+	isBeian = result.StateCode == 1 && result.Result.SiteLicense != ""
 	logger.WithFields(log.Fields{
-		"elapsed":   time.Since(startTime),
-		"isBeian":   isBeian,
-		"response":  string(body),
+		"domain": mainDomain,
+		"isBeian": isBeian,
+		"elapsed": time.Since(startTime),
+		"response": string(body),
 	}).Debug("备案查询完成")
 
-	// 保存到缓存
-	if err := admin.SaveBeianCache(s.db, mainDomain, isBeian, string(body)); err != nil {
-		logger.WithError(err).Error("保存备案缓存失败")
+	// 更新缓存
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO beian_cache (domain, is_beian, updated_at) 
+		VALUES (?, ?, datetime('now')) 
+		ON CONFLICT(domain) DO UPDATE SET 
+		is_beian = excluded.is_beian, 
+		updated_at = excluded.updated_at`,
+		mainDomain, isBeian)
+	if err != nil {
+		logger.WithError(err).Error("更新备案缓存失败")
 	}
 
 	return isBeian

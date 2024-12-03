@@ -100,140 +100,126 @@ func (s *DnsServer) Start() {
 				continue
 			}
 
-			go s.handleDNSMessage(remoteAddr, buffer[:n], uuid.New().String())
+			go s.handleDNSQuery(remoteAddr, buffer[:n])
 		}
 	}
 }
 
-func (s *DnsServer) handleDNSMessage(senderAddr *net.UDPAddr, message []byte, requestID string) {
+func (s *DnsServer) handleDNSQuery(senderAddr *net.UDPAddr, queryData []byte) {
 	startTime := time.Now()
-	var m dnsmessage.Message
-	err := m.Unpack(message)
-	if err != nil {
-		log.WithError(err).Error("解析DNS消息失败")
-		return
-	}
-
+	requestID := uuid.New().String()
 	logger := log.WithFields(log.Fields{
 		"requestId": requestID,
-		"client":    senderAddr.String(),
-		"domain":    m.Questions[0].Name.String(),
-		"type":      m.Questions[0].Type,
-		"class":     m.Questions[0].Class,
-		"msgId":     m.Header.ID,
+		"clientIp": senderAddr.IP.String(),
 	})
 
-	defer func() {
-		logger.WithField("elapsed", time.Since(startTime).String()).Debug("DNS请求处理完成")
-	}()
+	// 解析 DNS 查询
+	var queryMsg dnsmessage.Message
+	if err := queryMsg.Unpack(queryData); err != nil {
+		logger.WithError(err).Error("解析 DNS 查询失败")
+		return
+	}
 
-	// 创建带取消的 context
+	if len(queryMsg.Questions) == 0 {
+		logger.Error("DNS 查询中没有问题")
+		return
+	}
+
+	queryQuestion := queryMsg.Questions[0]
+	domain := strings.TrimSuffix(queryQuestion.Name.String(), ".")
+	logger = logger.WithFields(log.Fields{
+		"domain": domain,
+		"type":   queryQuestion.Type.String(),
+	})
+
+	// 判断是否使用中国 DNS
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx = context.WithValue(ctx, client.RequestIDKey, requestID)
 	defer cancel()
 
-	// 将 requestID 添加到 context
-	ctx = context.WithValue(ctx, client.RequestIDKey, requestID)
-
-	queryQuestion := m.Questions[0]
-	domainName := queryQuestion.Name.String()
-
+	isChinaDNS := s.chinaDomainService.IsChinaDomain(ctx, domain)
 	var resolver client.DNSResolver
-	var isChinaDNS bool
-	resolver = s.overseaResolver
-
-	resolveStartTime := time.Now()
-	if s.chinaDomainService.IsChinaDomain(ctx, domainName) {
+	if isChinaDNS {
 		resolver = s.chinaResolver
-		isChinaDNS = true
-		logger.Debug("使用国内DNS服务器解析")
+		logger.Debug("使用中国 DNS 服务器")
 	} else {
-		logger.Debug("使用海外DNS服务器解析")
+		resolver = s.overseaResolver
+		logger.Debug("使用海外 DNS 服务器")
 	}
 
-	resp, err := resolver.Request(ctx, m)
-	resolveElapsed := time.Since(resolveStartTime)
+	// 发送查询
+	respData, err := resolver.Request(ctx, queryMsg)
 	if err != nil {
-		logger.WithError(err).WithField("resolveTime", resolveElapsed.String()).Error("DNS解析失败")
+		logger.WithError(err).Error("DNS 查询失败")
 		return
 	}
 
-	var respM dnsmessage.Message
-	err = respM.Unpack(resp)
-	if err != nil {
-		logger.WithError(err).Error("解析DNS响应失败")
+	// 解析响应
+	var respMsg dnsmessage.Message
+	if err := respMsg.Unpack(respData); err != nil {
+		logger.WithError(err).Error("解析 DNS 响应失败")
 		return
 	}
 
-	// 格式化响应内容
-	var answers []map[string]interface{}
-	for _, answer := range respM.Answers {
-		answerMap := map[string]interface{}{
-			"name": answer.Header.Name.String(),
-			"type": answer.Header.Type.String(),
-			"ttl":  answer.Header.TTL,
-		}
-
-		// 根据记录类型解析响应内容
-		switch answer.Header.Type {
-		case dnsmessage.TypeA:
-			if a, ok := answer.Body.(*dnsmessage.AResource); ok {
-				ip := net.IP(a.A[:])
-				answerMap["data"] = ip.String()
-			}
-		case dnsmessage.TypeAAAA:
-			if aaaa, ok := answer.Body.(*dnsmessage.AAAAResource); ok {
-				ip := net.IP(aaaa.AAAA[:])
-				answerMap["data"] = ip.String()
-			}
-		case dnsmessage.TypeCNAME:
-			if cname, ok := answer.Body.(*dnsmessage.CNAMEResource); ok {
-				answerMap["data"] = cname.CNAME.String()
-			}
-		case dnsmessage.TypeMX:
-			if mx, ok := answer.Body.(*dnsmessage.MXResource); ok {
-				answerMap["data"] = fmt.Sprintf("%d %s", mx.Pref, mx.MX.String())
-			}
-		case dnsmessage.TypeTXT:
-			if txt, ok := answer.Body.(*dnsmessage.TXTResource); ok {
-				answerMap["data"] = strings.Join(txt.TXT, " ")
-			}
-		default:
-			answerMap["data"] = "unsupported record type"
-		}
-		answers = append(answers, answerMap)
+	// 发送响应
+	if _, err := s.listenConn.WriteToUDP(respData, senderAddr); err != nil {
+		logger.WithError(err).Error("发送 DNS 响应失败")
+		return
 	}
 
-	// 记录查询信息到数据库
-	query := &admin.DNSQuery{
+	// 提取 answers
+	var answers []string
+	for _, answer := range respMsg.Answers {
+		switch answer.Body.(type) {
+		case *dnsmessage.AResource:
+			a := answer.Body.(*dnsmessage.AResource)
+			ip := net.IP(a.A[:])
+			answers = append(answers, ip.String())
+		case *dnsmessage.AAAAResource:
+			aaaa := answer.Body.(*dnsmessage.AAAAResource)
+			ip := net.IP(aaaa.AAAA[:])
+			answers = append(answers, ip.String())
+		case *dnsmessage.CNAMEResource:
+			cname := answer.Body.(*dnsmessage.CNAMEResource)
+			answers = append(answers, cname.CNAME.String())
+		case *dnsmessage.MXResource:
+			mx := answer.Body.(*dnsmessage.MXResource)
+			answers = append(answers, fmt.Sprintf("%d %s", mx.Pref, mx.MX.String()))
+		case *dnsmessage.NSResource:
+			ns := answer.Body.(*dnsmessage.NSResource)
+			answers = append(answers, ns.NS.String())
+		case *dnsmessage.PTRResource:
+			ptr := answer.Body.(*dnsmessage.PTRResource)
+			answers = append(answers, ptr.PTR.String())
+		case *dnsmessage.TXTResource:
+			txt := answer.Body.(*dnsmessage.TXTResource)
+			answers = append(answers, strings.Join(txt.TXT, " "))
+		}
+	}
+
+	// 保存查询记录
+	dnsQuery := &admin.DNSQuery{
 		RequestID:    requestID,
-		Domain:      domainName,
+		Domain:      domain,
 		QueryType:   queryQuestion.Type.String(),
 		ClientIP:    senderAddr.IP.String(),
 		Server:      resolver.String(),
 		IsChinaDNS:  isChinaDNS,
-		ResponseCode: int(respM.Header.RCode),
-		AnswerCount: len(respM.Answers),
-		TotalTime:   time.Since(startTime).Milliseconds(),
+		ResponseCode: int(respMsg.Header.RCode),
+		AnswerCount: len(respMsg.Answers),
+		TotalTimeMs: float64(time.Since(startTime).Microseconds()) / 1000.0, // 转换为毫秒的浮点数
 		CreatedAt:   startTime,
 		Answers:     answers,
 	}
-	if err := admin.SaveDNSQuery(s.db, query); err != nil {
+	if err := admin.SaveDNSQuery(s.db, dnsQuery); err != nil {
 		logger.WithError(err).Error("保存查询记录失败")
 	}
 
 	logger.WithFields(log.Fields{
-		"answers":     len(respM.Answers),
-		"authorities": len(respM.Authorities),
-		"additionals": len(respM.Additionals),
-		"rcode":      respM.Header.RCode,
-		"resolveTime": resolveElapsed.String(),
-		"answerDetails": answers,
-	}).Debug("DNS解析完成")
-
-	_, err = s.listenConn.WriteToUDP(resp, senderAddr)
-	if err != nil {
-		logger.WithError(err).Error("发送DNS响应失败")
-	}
+		"answers":     len(respMsg.Answers),
+		"totalTimeMs": dnsQuery.TotalTimeMs,
+		"isChinaDNS": isChinaDNS,
+	}).Info("DNS 查询完成")
 }
 
 func (s *DnsServer) GetDB() *sql.DB {

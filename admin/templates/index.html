@@ -315,9 +315,6 @@
               case "queries":
                 updateQueries(data.data);
                 break;
-              case "today_stats":
-                updateTodayStats(data.data);
-                break;
               case "query_logs":
                 updateQueryTimeline(data.data);
                 break;
@@ -357,27 +354,19 @@
 
       // 更新今日统计数据
       function updateTodayStats(stats) {
-        if (!stats || !Array.isArray(stats)) {
+        if (!stats) {
           console.log("Invalid today stats data:", stats);
           return;
         }
 
-        // 计算总数
-        const totals = stats.reduce(
-          (acc, curr) => ({
-            total: acc.total + (parseInt(curr.total) || 0),
-            china_dns: acc.china_dns + (parseInt(curr.china_dns) || 0),
-            oversea_dns: acc.oversea_dns + (parseInt(curr.oversea_dns) || 0),
-          }),
-          { total: 0, china_dns: 0, oversea_dns: 0 }
-        );
-
+        console.log({ stats });
         // 更新统计卡片
-        document.getElementById("totalQueries").textContent = totals.total;
+        document.getElementById("totalQueries").textContent =
+          stats.total_queries || 0;
         document.getElementById("chinaDNSQueries").textContent =
-          totals.china_dns;
+          stats.china_dns_queries || 0;
         document.getElementById("overseaDNSQueries").textContent =
-          totals.oversea_dns;
+          stats.oversea_dns_queries || 0;
       }
 
       // 获取查询记录

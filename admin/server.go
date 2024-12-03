@@ -16,11 +16,11 @@ import (
 )
 
 type Server struct {
-	db            *sql.DB
 	router        *gin.Engine
+	db            *sql.DB
+	broadcast     chan interface{}
 	wsClients     map[*websocket.Conn]bool
 	wsClientMutex sync.RWMutex
-	broadcast     chan interface{}
 }
 
 var upgrader = websocket.Upgrader{
@@ -32,14 +32,20 @@ var upgrader = websocket.Upgrader{
 }
 
 func NewServer(db *sql.DB) *Server {
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.New()
+	router.Use(gin.Recovery())
+
 	s := &Server{
+		router:    router,
 		db:        db,
-		router:    gin.Default(),
+		broadcast: make(chan interface{}, 100),
 		wsClients: make(map[*websocket.Conn]bool),
-		broadcast: make(chan interface{}, 256),
 	}
+
 	s.setupRoutes()
 	go s.handleBroadcast()
+
 	return s
 }
 
@@ -115,6 +121,14 @@ func (s *Server) handleWSMessage(conn *websocket.Conn, message []byte) {
 				s.handleGetStats(conn, startTime, endTime)
 			}
 		}
+	case "get_today_stats":
+		if start, ok := msg.Payload["start"].(string); ok {
+			if end, ok := msg.Payload["end"].(string); ok {
+				startTime, _ := time.Parse(time.RFC3339, start)
+				endTime, _ := time.Parse(time.RFC3339, end)
+				s.handleGetTodayStats(conn, startTime, endTime)
+			}
+		}
 	case "get_query_logs":
 		if requestID, ok := msg.Payload["request_id"].(string); ok {
 			s.handleGetQueryLogs(conn, requestID)
@@ -176,6 +190,26 @@ func (s *Server) handleGetStats(conn *websocket.Conn, startTime, endTime time.Ti
 		return
 	}
 	s.sendWSMessage(conn, "stats", stats)
+}
+
+func (s *Server) handleGetTodayStats(conn *websocket.Conn, startTime, endTime time.Time) {
+	// 获取统计数据
+	stats, err := GetQueryStats(s.db, startTime, endTime)
+	if err != nil {
+		logrus.WithError(err).Error("获取今日统计数据失败")
+		return
+	}
+
+	// 构造返回数据，使用前端期望的字段名
+	data := []map[string]interface{}{
+		{
+			"total":       stats.TotalQueries,
+			"china_dns":   stats.ChinaDNSQueries,
+			"oversea_dns": stats.OverseaDNSQueries,
+		},
+	}
+
+	s.sendWSMessage(conn, "today_stats", data)
 }
 
 func (s *Server) handleGetQueryLogs(conn *websocket.Conn, requestID string) {
@@ -295,7 +329,7 @@ func (s *Server) handleGetQueries(conn *websocket.Conn, cursor string, limit int
 			FROM dns_queries
 			ORDER BY created_at DESC, id DESC
 			LIMIT ?`,
-			limit+1, // 多获取一条用于判断是否有下一页
+			limit+1, // 多获取条用于判断是否有下一页
 		)
 	} else {
 		// 解析游标
@@ -342,7 +376,7 @@ func (s *Server) handleGetQueries(conn *websocket.Conn, cursor string, limit int
 		err := rows.Scan(
 			&q.ID, &q.RequestID, &q.Domain, &q.QueryType, &q.ClientIP,
 			&q.Server, &q.IsChinaDNS, &q.ResponseCode, &q.AnswerCount,
-			&q.TotalTime, &q.CreatedAt, &answersJSON,
+			&q.TotalTimeMs, &q.CreatedAt, &answersJSON,
 		)
 		if err != nil {
 			logrus.WithError(err).Error("扫描DNS记录失败")

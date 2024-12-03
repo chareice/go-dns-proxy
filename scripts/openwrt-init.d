@@ -30,7 +30,6 @@ start_service() {
     mkdir -p "$data_dir"
 
     procd_open_instance
-    procd_set_param env CGO_ENABLED=1
     procd_set_param command $PROG \
         --logLevel "$log_level" \
         start \
