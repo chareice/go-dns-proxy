@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -23,8 +24,10 @@ func NewDOTClient(serverAddr string) *DOTClient {
 	}
 }
 
-func (c *DOTClient) Request(m dnsmessage.Message) ([]byte, error) {
+func (c *DOTClient) Request(ctx context.Context, m dnsmessage.Message) ([]byte, error) {
 	startTime := time.Now()
+	requestID, _ := ctx.Value(RequestIDKey).(string)
+
 	// 确保服务器地址包含端口，默认为 853
 	host, port, err := net.SplitHostPort(c.serverAddr)
 	if err != nil {
@@ -33,6 +36,7 @@ func (c *DOTClient) Request(m dnsmessage.Message) ([]byte, error) {
 	}
 
 	logger := log.WithFields(log.Fields{
+		"requestId":  requestID,
 		"server":     fmt.Sprintf("%s:%s", host, port),
 		"type":       m.Questions[0].Type,
 		"domain":     m.Questions[0].Name.String(),
@@ -55,6 +59,7 @@ func (c *DOTClient) Request(m dnsmessage.Message) ([]byte, error) {
 	}
 
 	logger.Debug("开始建立TLS连接")
+	tlsStartTime := time.Now()
 
 	// 建立 TLS 连接
 	tlsConfig := &tls.Config{
@@ -62,36 +67,38 @@ func (c *DOTClient) Request(m dnsmessage.Message) ([]byte, error) {
 		ServerName:         host,
 		InsecureSkipVerify: true, // 仅用于测试
 	}
-	logger.WithFields(log.Fields{
-		"tlsVersion": "1.2+",
-		"serverName": host,
-	}).Debug("TLS配置已设置")
 
 	conn, err := tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(host, port), tlsConfig)
 	if err != nil {
-		logger.WithError(err).Error("TLS连接失败")
+		logger.WithError(err).WithField("tlsTime", time.Since(tlsStartTime).String()).Error("TLS连接失败")
 		return nil, fmt.Errorf("TLS连接失败: %v", err)
 	}
 	defer conn.Close()
 
 	connState := conn.ConnectionState()
 	logger.WithFields(log.Fields{
-		"version":            connState.Version,
+		"version":           connState.Version,
 		"handshakeComplete": connState.HandshakeComplete,
 		"cipherSuite":       connState.CipherSuite,
-		"elapsed":           time.Since(startTime).String(),
+		"tlsTime":          time.Since(tlsStartTime).String(),
 	}).Debug("TLS连接已建立")
 
 	// 设置读写超时
-	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	deadline, ok := ctx.Deadline()
+	if ok {
+		conn.SetDeadline(deadline)
+	} else {
+		conn.SetDeadline(time.Now().Add(3 * time.Second))
+	}
 
 	// 打包 DNS 消息
+	packStartTime := time.Now()
 	dnsMessage, err := m.Pack()
 	if err != nil {
 		logger.WithError(err).Error("打包DNS消息失败")
 		return nil, fmt.Errorf("打包DNS消息失败: %v", err)
 	}
-	logger.WithField("messageSize", len(dnsMessage)).Debug("DNS消息打包完成")
+	logger.WithField("packTime", time.Since(packStartTime).String()).Debug("DNS消息打包完成")
 
 	// 添加两字节的长度前缀
 	length := uint16(len(dnsMessage))
@@ -101,19 +108,23 @@ func (c *DOTClient) Request(m dnsmessage.Message) ([]byte, error) {
 	copy(prefixedMessage[2:], dnsMessage)
 
 	// 发送请求
-	requestTime := time.Now()
+	writeStartTime := time.Now()
 	_, err = conn.Write(prefixedMessage)
 	if err != nil {
-		logger.WithError(err).Error("发送DOT请求失败")
+		logger.WithError(err).WithField("writeTime", time.Since(writeStartTime).String()).Error("发送DOT请求失败")
 		return nil, fmt.Errorf("发送请求失败: %v", err)
 	}
-	logger.WithField("messageSize", len(prefixedMessage)).Debug("DOT请求已发送，等待响应")
+	logger.WithFields(log.Fields{
+		"messageSize": len(prefixedMessage),
+		"writeTime":   time.Since(writeStartTime).String(),
+	}).Debug("DOT请求已发送，等待响应")
 
-	// 读取响应长度
+	// 读取响应
+	readStartTime := time.Now()
 	lengthBytes := make([]byte, 2)
 	_, err = io.ReadFull(conn, lengthBytes)
 	if err != nil {
-		logger.WithError(err).Error("读取DOT响应长度失败")
+		logger.WithError(err).WithField("readTime", time.Since(readStartTime).String()).Error("读取DOT响应长度失败")
 		return nil, fmt.Errorf("读取响应长度失败: %v", err)
 	}
 	responseLength := int(lengthBytes[0])<<8 | int(lengthBytes[1])
@@ -124,21 +135,13 @@ func (c *DOTClient) Request(m dnsmessage.Message) ([]byte, error) {
 		return nil, fmt.Errorf("无效的响应长度: %d", responseLength)
 	}
 
-	logger.WithField("length", responseLength).Debug("收到响应长度")
-
-	// 读取响应
+	// 读取响应内容
 	response := make([]byte, responseLength)
 	_, err = io.ReadFull(conn, response)
 	if err != nil {
-		logger.WithError(err).Error("读取DOT响应内容失败")
+		logger.WithError(err).WithField("readTime", time.Since(readStartTime).String()).Error("读取DOT响应内容失败")
 		return nil, fmt.Errorf("读取响应失败: %v", err)
 	}
-
-	elapsed := time.Since(requestTime)
-	logger.WithFields(log.Fields{
-		"responseSize": responseLength,
-		"elapsed":     elapsed.String(),
-	}).Debug("收到DOT响应")
 
 	// 解析响应以记录日志
 	var respMsg dnsmessage.Message
@@ -149,7 +152,10 @@ func (c *DOTClient) Request(m dnsmessage.Message) ([]byte, error) {
 			"additionals": len(respMsg.Additionals),
 			"rcode":      respMsg.Header.RCode,
 			"truncated":  respMsg.Header.Truncated,
+			"tlsTime":    time.Since(tlsStartTime).String(),
+			"readTime":   time.Since(readStartTime).String(),
 			"totalTime":  time.Since(startTime).String(),
+			"bodySize":   len(response),
 		}).Debug("DOT响应解析完成")
 	}
 

@@ -1,7 +1,11 @@
 package client
 
-import "golang.org/x/net/dns/dnsmessage"
+import (
+	"context"
+
+	"golang.org/x/net/dns/dnsmessage"
+)
 
 type DNSResolver interface {
-	Request(m dnsmessage.Message) ([]byte, error)
+	Request(ctx context.Context, m dnsmessage.Message) ([]byte, error)
 } 

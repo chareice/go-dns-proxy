@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -84,7 +85,8 @@ func TestChinaDomainService_IsChinaDomain(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := service.IsChinaDomain(tt.domain); got != tt.want {
+			ctx := context.Background()
+			if got := service.IsChinaDomain(ctx, tt.domain); got != tt.want {
 				t.Errorf("ChinaDomainService.IsChinaDomain() = %v, want %v", got, tt.want)
 			}
 		})
@@ -124,7 +126,8 @@ func TestChinaDomainService_Cache(t *testing.T) {
 
 	for _, d := range domains {
 		// 触发备案查询并缓存
-		result := service.isBeianDomain(fmt.Sprintf("www.%s.", d.domain))
+		ctx := context.Background()
+		result := service.isBeianDomain(ctx, fmt.Sprintf("www.%s.", d.domain))
 		if result != d.want {
 			t.Errorf("isBeianDomain(%s) = %v, want %v", d.domain, result, d.want)
 		}

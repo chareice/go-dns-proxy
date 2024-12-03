@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strconv"
@@ -14,6 +15,12 @@ type DNSClient struct {
 	serverAddr string
 }
 
+type contextKey string
+
+const (
+	RequestIDKey contextKey = "requestID"
+)
+
 func NewDNSClient(serverAddr string) *DNSClient {
 	log.WithField("server", serverAddr).Debug("创建DNS客户端")
 	return &DNSClient{
@@ -21,15 +28,19 @@ func NewDNSClient(serverAddr string) *DNSClient {
 	}
 }
 
-func (c *DNSClient) Request(m dnsmessage.Message) ([]byte, error) {
+func (c *DNSClient) Request(ctx context.Context, m dnsmessage.Message) ([]byte, error) {
+	// 从 context 获取 requestID
+	requestID, _ := ctx.Value(RequestIDKey).(string)
+
 	// 确保服务器地址包含端口
 	host, port, err := net.SplitHostPort(c.serverAddr)
 	if err != nil {
 		host = c.serverAddr
-		port = "53"
+			port = "53"
 	}
 
 	logger := log.WithFields(log.Fields{
+		"requestId":  requestID,
 		"server":     fmt.Sprintf("%s:%s", host, port),
 		"type":       m.Questions[0].Type,
 		"domain":     m.Questions[0].Name.String(),
@@ -51,7 +62,9 @@ func (c *DNSClient) Request(m dnsmessage.Message) ([]byte, error) {
 		Timeout: 2 * time.Second,
 	}
 	logger.Debug("开始建立UDP连接")
-	conn, err := dialer.Dial("udp", net.JoinHostPort(host, port))
+
+	// 使用 context 控制连接超时
+	conn, err := dialer.DialContext(ctx, "udp", net.JoinHostPort(host, port))
 	if err != nil {
 		logger.WithError(err).Error("连接DNS服务器失败")
 		return nil, fmt.Errorf("连接失败: %v", err)
@@ -60,7 +73,12 @@ func (c *DNSClient) Request(m dnsmessage.Message) ([]byte, error) {
 	logger.Debug("UDP连接已建立")
 
 	// 设置读写超时
-	conn.SetDeadline(time.Now().Add(2 * time.Second))
+	deadline, ok := ctx.Deadline()
+	if ok {
+		conn.SetDeadline(deadline)
+	} else {
+		conn.SetDeadline(time.Now().Add(2 * time.Second))
+	}
 
 	// 打包 DNS 消息
 	packed, err := m.Pack()
