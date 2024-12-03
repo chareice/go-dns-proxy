@@ -85,6 +85,39 @@ test_doh() {
     fi
 }
 
+# 测试 DOT 服务器
+test_dot() {
+    local server=$1
+    local domain=$2
+    local timeout=5
+    
+    echo "测试 DOT 服务器: $server"
+    echo "测试域名: $domain"
+    
+    # 提取服务器地址和端口
+    local server_addr=${server#tls://}
+    local host=${server_addr%:*}
+    local port=${server_addr#*:}
+    if [ "$host" = "$port" ]; then
+        port=853
+    fi
+    
+    # 使用 openssl 测试 TLS 连接
+    result=$(echo "Q" | timeout $timeout openssl s_client -connect "$host:$port" 2>&1)
+    if echo "$result" | grep -q "CONNECTED"; then
+        echo "✅ TLS 连接正常"
+        return 0
+    else
+        echo "❌ TLS 连接失败"
+        echo "   可能原因："
+        echo "   1. 网络连接问题"
+        echo "   2. DNS 解析失败"
+        echo "   3. 服务器未开放 TCP/$port 端口"
+        echo "   4. TLS 证书问题"
+        return 1
+    fi
+}
+
 echo "=== DNS 服务器连通性测试 ==="
 echo ""
 
@@ -94,6 +127,8 @@ if [ -n "$china_server" ]; then
     echo "国内服务器测试："
     if echo "$china_server" | grep -q "^https://"; then
         test_doh "$china_server" "$TEST_DOMAIN"
+    elif echo "$china_server" | grep -q "^tls://"; then
+        test_dot "$china_server" "$TEST_DOMAIN"
     else
         test_dns "$china_server" "$TEST_DOMAIN"
     fi
@@ -108,6 +143,8 @@ if [ -n "$oversea_server" ]; then
     echo "海外服务器测试："
     if echo "$oversea_server" | grep -q "^https://"; then
         test_doh "$oversea_server" "$TEST_DOMAIN_OVERSEA"
+    elif echo "$oversea_server" | grep -q "^tls://"; then
+        test_dot "$oversea_server" "$TEST_DOMAIN_OVERSEA"
     else
         test_dns "$oversea_server" "$TEST_DOMAIN_OVERSEA"
     fi

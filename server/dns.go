@@ -1,8 +1,8 @@
 package server
 
 import (
-	"go-dns-server/client"
-	"go-dns-server/domain"
+	"go-dns-proxy/client"
+	"go-dns-proxy/domain"
 	"log"
 	"net"
 	"strings"
@@ -38,37 +38,33 @@ func NewDnsServer(options *NewServerOptions) *DnsServer {
 
 	var chinaResolver, overseaResolver client.DNSResolver
 
-	// 通过检查地址是否包含 http 来判断是否使用 DOH
-	isChinaDOH := strings.Contains(strings.ToLower(options.ChinaServerAddr), "http")
-	isOverseaDOH := strings.Contains(strings.ToLower(options.OverSeaServerAddr), "http")
-
-	// 处理中国服务器
-	if isChinaDOH {
-		chinaResolver = client.NewDOHClient(options.ChinaServerAddr)
-	} else {
-		chinaAddr := options.ChinaServerAddr
-		if !strings.Contains(chinaAddr, ":") {
-			chinaAddr = chinaAddr + ":53"
-		}
-		chinaResolver = client.NewDNSClient(chinaAddr)
-	}
-
-	// 处理海外服务器
-	if isOverseaDOH {
-		overseaResolver = client.NewDOHClient(options.OverSeaServerAddr)
-	} else {
-		overseaAddr := options.OverSeaServerAddr
-		if !strings.Contains(overseaAddr, ":") {
-			overseaAddr = overseaAddr + ":53"
-		}
-		overseaResolver = client.NewDNSClient(overseaAddr)
-	}
+	// 检查服务器类型
+	chinaResolver = createResolver(options.ChinaServerAddr)
+	overseaResolver = createResolver(options.OverSeaServerAddr)
 
 	return &DnsServer{
 		listenConn:         conn,
 		chinaResolver:      chinaResolver,
 		overseaResolver:    overseaResolver,
 		chinaDomainService: domain.NewChinaDomainService(options.ApiKey, options.BeianCacheFile, options.BeianCacheInterval),
+	}
+}
+
+// createResolver 根据地址创建对应的解析器
+func createResolver(addr string) client.DNSResolver {
+	addrLower := strings.ToLower(addr)
+	
+	switch {
+	case strings.HasPrefix(addrLower, "https://"):
+		return client.NewDOHClient(addr)
+	case strings.HasPrefix(addrLower, "tls://"):
+		return client.NewDOTClient(strings.TrimPrefix(addr, "tls://"))
+	default:
+		// 普通 DNS，添加默认端口
+		if !strings.Contains(addr, ":") {
+			addr = addr + ":53"
+		}
+		return client.NewDNSClient(addr)
 	}
 }
 

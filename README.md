@@ -1,10 +1,13 @@
 # Go DNS Proxy
 
-一个支持国内外分流的 DNS 代理服务器。可以根据域名自动选择合适的上游 DNS 服务器，支持普通 DNS 和 DOH(DNS over HTTPS)。
+一个支持国内外分流的 DNS 代理服务器。可以根据域名自动选择合适的上游 DNS 服务器，支持普通 DNS、DOH(DNS over HTTPS) 和 DOT(DNS over TLS)。
 
 ## 特性
 
-- 支持普通 DNS 和 DOH 服务器作为上游
+- 支持多种 DNS 协议
+  - 普通 DNS（UDP）
+  - DNS over HTTPS (DOH)
+  - DNS over TLS (DOT)
 - 支持根据域名后缀自动判断国内外分流（如 .cn, .中国 等）
 - 支持根据备案信息判断国内外分流（需要 API Key）
 - 支持 OpenWrt 自动安装和配置
@@ -68,14 +71,16 @@ config go-dns-proxy 'main'
     # DNS 服务监听端口
     option port '53'
 
-    # 国内 DNS 服务器地址
-    # 支持普通 DNS（例如：114.114.114.114）
-    # 或 DOH（例如：https://120.53.53.53/dns-query）
+    # 国内 DNS 服务器地址，支持以下格式：
+    # 1. 普通 DNS：114.114.114.114 或 114.114.114.114:53
+    # 2. DOH：https://120.53.53.53/dns-query
+    # 3. DOT：tls://dns.alidns.com 或 tls://dns.alidns.com:853
     option china_server '114.114.114.114'
 
-    # 海外 DNS 服务器地址
-    # 支持普通 DNS（例如：8.8.8.8）
-    # 或 DOH（例如：https://1.1.1.1/dns-query）
+    # 海外 DNS 服务器地址，支持以下格式：
+    # 1. 普通 DNS：8.8.8.8 或 8.8.8.8:53
+    # 2. DOH：https://1.1.1.1/dns-query
+    # 3. DOT：tls://1.1.1.1 或 tls://1.1.1.1:853
     option oversea_server '1.1.1.1'
 
     # 备案查询 API Key（可选）
