@@ -2,8 +2,10 @@ package admin
 
 import (
 	"database/sql"
+	"embed"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,6 +16,9 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
 )
+
+//go:embed templates/*.html
+var templatesFS embed.FS
 
 type Server struct {
 	router        *gin.Engine
@@ -36,6 +41,10 @@ func NewServer(db *sql.DB) *Server {
 	router := gin.New()
 	router.Use(gin.Recovery())
 
+	// 使用 embed.FS 加载模板
+	templ := template.Must(template.New("").ParseFS(templatesFS, "templates/*.html"))
+	router.SetHTMLTemplate(templ)
+
 	s := &Server{
 		router:    router,
 		db:        db,
@@ -50,7 +59,6 @@ func NewServer(db *sql.DB) *Server {
 }
 
 func (s *Server) setupRoutes() {
-	s.router.LoadHTMLGlob("admin/templates/*")
 	s.router.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "index.html", nil)
 	})
