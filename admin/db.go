@@ -90,6 +90,11 @@ func createTables(db *sql.DB) error {
 }
 
 func SaveDNSQuery(db *sql.DB, query *DNSQuery) error {
+	// 只在 info 和 debug 级别保存查询记录
+	if log.GetLevel() != log.InfoLevel && log.GetLevel() != log.DebugLevel {
+		return nil
+	}
+
 	answersJSON, err := json.Marshal(query.Answers)
 	if err != nil {
 		return err
