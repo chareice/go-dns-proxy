@@ -1,6 +1,7 @@
 package client
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -8,6 +9,11 @@ import (
 )
 
 func TestDOTClient_Request(t *testing.T) {
+	// 如果设置了 SKIP_NETWORK_TESTS 环境变量，跳过网络测试
+	if os.Getenv("SKIP_NETWORK_TESTS") != "" {
+		t.Skip("Skipping network tests")
+	}
+
 	tests := []struct {
 		name       string
 		serverAddr string

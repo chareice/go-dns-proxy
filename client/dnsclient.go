@@ -30,11 +30,14 @@ func (c *DNSClient) Request(m dnsmessage.Message) ([]byte, error) {
 	}
 
 	logger := log.WithFields(log.Fields{
-		"server": fmt.Sprintf("%s:%s", host, port),
-		"type":   m.Questions[0].Type,
-		"domain": m.Questions[0].Name.String(),
+		"server":     fmt.Sprintf("%s:%s", host, port),
+		"type":       m.Questions[0].Type,
+		"domain":     m.Questions[0].Name.String(),
+		"messageId":  m.Header.ID,
+		"recursion":  m.Header.RecursionDesired,
+		"questions":  len(m.Questions),
 	})
-	logger.Debug("发送DNS请求")
+	logger.Debug("准备发送DNS请求")
 
 	// 验证端口号
 	portNum, err := strconv.Atoi(port)
@@ -47,12 +50,14 @@ func (c *DNSClient) Request(m dnsmessage.Message) ([]byte, error) {
 	dialer := net.Dialer{
 		Timeout: 2 * time.Second,
 	}
+	logger.Debug("开始建立UDP连接")
 	conn, err := dialer.Dial("udp", net.JoinHostPort(host, port))
 	if err != nil {
 		logger.WithError(err).Error("连接DNS服务器失败")
 		return nil, fmt.Errorf("连接失败: %v", err)
 	}
 	defer conn.Close()
+	logger.Debug("UDP连接已建立")
 
 	// 设置读写超时
 	conn.SetDeadline(time.Now().Add(2 * time.Second))
@@ -63,13 +68,16 @@ func (c *DNSClient) Request(m dnsmessage.Message) ([]byte, error) {
 		logger.WithError(err).Error("打包DNS消息失败")
 		return nil, fmt.Errorf("打包DNS消息失败: %v", err)
 	}
+	logger.WithField("messageSize", len(packed)).Debug("DNS消息打包完成")
 
 	// 发送请求
+	startTime := time.Now()
 	_, err = conn.Write(packed)
 	if err != nil {
 		logger.WithError(err).Error("发送DNS请求失败")
 		return nil, fmt.Errorf("发送请求失败: %v", err)
 	}
+	logger.Debug("DNS请求已发送，等待响应")
 
 	// 读取响应
 	response := make([]byte, 512)
@@ -78,11 +86,19 @@ func (c *DNSClient) Request(m dnsmessage.Message) ([]byte, error) {
 		logger.WithError(err).Error("读取DNS响应失败")
 		return nil, fmt.Errorf("读取响应失败: %v", err)
 	}
+	elapsed := time.Since(startTime)
+	logger.WithField("responseSize", n).WithField("elapsed", elapsed.String()).Debug("收到DNS响应")
 
 	// 解析响应以记录日志
 	var respMsg dnsmessage.Message
 	if err := respMsg.Unpack(response[:n]); err == nil {
-		logger.WithField("answers", len(respMsg.Answers)).Debug("收到DNS响应")
+		logger.WithFields(log.Fields{
+			"answers":     len(respMsg.Answers),
+			"authorities": len(respMsg.Authorities),
+			"additionals": len(respMsg.Additionals),
+			"rcode":      respMsg.Header.RCode,
+			"truncated":  respMsg.Header.Truncated,
+		}).Debug("DNS响应解析完成")
 	}
 
 	return response[:n], nil
