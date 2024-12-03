@@ -171,10 +171,7 @@ func (s *ChinaDomainService) IsChinaDomain(ctx context.Context, domain string) b
 	var result struct {
 		StateCode int    `json:"StateCode"`
 		Reason    string `json:"Reason"`
-		Result    struct {
-			CompanyName  string `json:"CompanyName"`
-			SiteLicense string `json:"SiteLicense"`
-		} `json:"Result"`
+		Result    any    `json:"Result"`
 	}
 
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -183,7 +180,7 @@ func (s *ChinaDomainService) IsChinaDomain(ctx context.Context, domain string) b
 	}
 
 	// 判断是否备案
-	isBeian = result.StateCode == 1 && result.Result.SiteLicense != ""
+	isBeian = result.StateCode == 1 && result.Result != nil
 	logger.WithFields(log.Fields{
 		"domain": mainDomain,
 		"isBeian": isBeian,
@@ -193,12 +190,13 @@ func (s *ChinaDomainService) IsChinaDomain(ctx context.Context, domain string) b
 
 	// 更新缓存
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO beian_cache (domain, is_beian, updated_at) 
-		VALUES (?, ?, datetime('now')) 
+		`INSERT INTO beian_cache (domain, is_beian, api_response, updated_at) 
+		VALUES (?, ?, ?, datetime('now')) 
 		ON CONFLICT(domain) DO UPDATE SET 
 		is_beian = excluded.is_beian, 
+		api_response = excluded.api_response,
 		updated_at = excluded.updated_at`,
-		mainDomain, isBeian)
+		mainDomain, isBeian, string(body))
 	if err != nil {
 		logger.WithError(err).Error("更新备案缓存失败")
 	}
