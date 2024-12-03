@@ -30,14 +30,16 @@ start_service() {
     mkdir -p "$data_dir"
 
     procd_open_instance
-    procd_set_param command $PROG start \
+    procd_set_param env CGO_ENABLED=1
+    procd_set_param command $PROG \
+        --logLevel "$log_level" \
+        start \
         --port "$port" \
         --chinaServer "$china_server" \
         --overSeaServer "$oversea_server" \
         --apiKey "$beian_api_key" \
         --adminPort "$admin_port" \
-        --dataDir "$data_dir" \
-        --logLevel "$log_level"
+        --dataDir "$data_dir"
     procd_set_param respawn
     procd_set_param stdout 1
     procd_set_param stderr 1
