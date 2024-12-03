@@ -67,7 +67,7 @@ func TestChinaDomainService_IsChinaDomain(t *testing.T) {
 		},
 		{
 			name:   "Test beian domain",
-			domain: "www.beian.com.",
+			domain: "www.beian.cn.",
 			want:   true,
 		},
 		{
