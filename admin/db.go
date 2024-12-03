@@ -308,13 +308,4 @@ func SaveBeianCache(db *sql.DB, domain string, isBeian bool, apiResponse string)
 	return err
 }
 
-func CleanOldBeianCache(db *sql.DB, maxAge time.Duration) error {
-	_, err := db.Exec(`
-		DELETE FROM beian_cache
-		WHERE updated_at < datetime('now', ?)`,
-		fmt.Sprintf("-%d seconds", int(maxAge.Seconds())),
-	)
-	return err
-}
-
 // ... rest of the file ... 

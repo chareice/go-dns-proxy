@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"go-dns-proxy/admin"
 	"go-dns-proxy/client"
 	"io"
 	"net/http"
@@ -65,26 +64,10 @@ func extractMainDomain(domain string) string {
 }
 
 func NewChinaDomainService(apiKey string, db *sql.DB) *ChinaDomainService {
-	service := &ChinaDomainService{
+	return &ChinaDomainService{
 		apiKey:      apiKey,
 		db:          db,
 		beianAPIURL: "https://apidata.chinaz.com/CallAPI/Domain",
-	}
-
-	// 启动定期清理过期缓存的协程
-	go service.cleanCacheRoutine()
-
-	return service
-}
-
-func (s *ChinaDomainService) cleanCacheRoutine() {
-	ticker := time.NewTicker(1 * time.Hour)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		if err := admin.CleanOldBeianCache(s.db, 24*time.Hour); err != nil {
-			log.WithError(err).Error("清理过期备案缓存失败")
-		}
 	}
 }
 
