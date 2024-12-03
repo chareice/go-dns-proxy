@@ -11,6 +11,7 @@
 - 支持根据域名后缀自动判断国内外分流（如 .cn, .中国 等）
 - 支持根据备案信息判断国内外分流（需要 API Key）
 - 支持 OpenWrt 自动安装和配置
+- 内置管理后台，可查看 DNS 查询日志和统计信息
 
 ## 安装和使用
 
@@ -87,11 +88,14 @@ config go-dns-proxy 'main'
     # 如果设置了 API Key，将使用备案信息判断国内外分流
     option beian_api_key ''
 
-    # 备案信息缓存文件路径
-    option beian_cache_file '/etc/go-dns-proxy/beian_cache.json'
+    # 管理后台端口
+    option admin_port '8080'
 
-    # 备案信息缓存写入间隔（秒）
-    option beian_cache_interval '10'
+    # 数据存储目录
+    option data_dir '/etc/go-dns-proxy/data'
+
+    # 日志级别 (debug/info/warn/error)
+    option log_level 'info'
 ```
 
 ### 服务控制
@@ -112,6 +116,14 @@ config go-dns-proxy 'main'
 # 禁用开机自启
 /etc/init.d/go-dns-proxy disable
 ```
+
+### 管理后台
+
+服务启动后，可以通过浏览器访问 `http://<设备IP>:8080` 进入管理后台，查看：
+
+- DNS 查询日志
+- 查询统计信息
+- 备案缓存信息
 
 ### 诊断调试
 
@@ -148,3 +160,4 @@ export url='https://raw.githubusercontent.com/chareice/go-dns-proxy/main/scripts
 2. 备案查询功能需要单独申请 API Key
 3. 修改配置后需要重启服务才能生效
 4. 确保 DNS 服务端口（默认 53）没有被其他服务占用
+5. 管理后台默认端口为 8080，请确保该端口未被占用

@@ -10,8 +10,9 @@ start_service() {
     local china_server
     local oversea_server
     local beian_api_key
-    local beian_cache_file
-    local beian_cache_interval
+    local admin_port
+    local data_dir
+    local log_level
 
     config_load 'go-dns-proxy'
     config_get enabled main 'enabled' '1'
@@ -19,13 +20,14 @@ start_service() {
     config_get china_server main 'china_server' '114.114.114.114'
     config_get oversea_server main 'oversea_server' '1.1.1.1'
     config_get beian_api_key main 'beian_api_key' ''
-    config_get beian_cache_file main 'beian_cache_file' '/etc/go-dns-proxy/beian_cache.json'
-    config_get beian_cache_interval main 'beian_cache_interval' '10'
+    config_get admin_port main 'admin_port' '8080'
+    config_get data_dir main 'data_dir' '/etc/go-dns-proxy/data'
+    config_get log_level main 'log_level' 'info'
 
     [ "$enabled" = "1" ] || return
 
-    # 确保缓存目录存在
-    mkdir -p "$(dirname "$beian_cache_file")"
+    # 确保数据目录存在
+    mkdir -p "$data_dir"
 
     procd_open_instance
     procd_set_param command $PROG start \
@@ -33,8 +35,9 @@ start_service() {
         --chinaServer "$china_server" \
         --overSeaServer "$oversea_server" \
         --apiKey "$beian_api_key" \
-        --beianCache "$beian_cache_file" \
-        --cacheInterval "$beian_cache_interval"
+        --adminPort "$admin_port" \
+        --dataDir "$data_dir" \
+        --logLevel "$log_level"
     procd_set_param respawn
     procd_set_param stdout 1
     procd_set_param stderr 1
