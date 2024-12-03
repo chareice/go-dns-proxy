@@ -3,7 +3,10 @@ package admin
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -116,6 +119,16 @@ func (s *Server) handleWSMessage(conn *websocket.Conn, message []byte) {
 		if requestID, ok := msg.Payload["request_id"].(string); ok {
 			s.handleGetQueryLogs(conn, requestID)
 		}
+	case "get_queries":
+		limit := 20
+		if l, ok := msg.Payload["limit"].(float64); ok {
+			limit = int(l)
+		}
+		var cursor string
+		if c, ok := msg.Payload["cursor"].(string); ok {
+			cursor = c
+		}
+		s.handleGetQueries(conn, cursor, limit)
 	case "set_log_level":
 		if level, ok := msg.Payload["level"].(string); ok {
 			s.handleSetLogLevel(conn, level)
@@ -234,11 +247,7 @@ func (s *Server) sendInitialData(conn *websocket.Conn) {
 	startTime := endTime.Add(-24 * time.Hour)
 	s.handleGetStats(conn, startTime, endTime)
 	s.handleGetBeianCache(conn)
-
-	queries, err := GetRecentQueries(s.db, 100)
-	if err == nil {
-		s.sendWSMessage(conn, "queries", queries)
-	}
+	s.handleGetQueries(conn, "", 20)
 
 	s.sendWSMessage(conn, "log_level", map[string]string{
 		"level": logrus.GetLevel().String(),
@@ -271,6 +280,98 @@ func (s *Server) sendWSMessage(conn *websocket.Conn, msgType string, data interf
 	if err != nil {
 		logrus.WithError(err).Error("WebSocket 发送失败")
 	}
+}
+
+func (s *Server) handleGetQueries(conn *websocket.Conn, cursor string, limit int) {
+	var rows *sql.Rows
+	var err error
+
+	if cursor == "" {
+		// 第一页，直接获取最新的记录
+		rows, err = s.db.Query(`
+			SELECT id, request_id, domain, query_type, client_ip,
+				   server, is_china_dns, response_code, answer_count,
+				   total_time_ms, created_at, answers
+			FROM dns_queries
+			ORDER BY created_at DESC, id DESC
+			LIMIT ?`,
+			limit+1, // 多获取一条用于判断是否有下一页
+		)
+	} else {
+		// 解析游标
+		cursorData := strings.Split(cursor, "_")
+		if len(cursorData) != 2 {
+			logrus.Error("无效的游标格式")
+			return
+		}
+		cursorTime, err := time.Parse(time.RFC3339Nano, cursorData[0])
+		if err != nil {
+			logrus.WithError(err).Error("解析游标时间失败")
+			return
+		}
+		cursorID, err := strconv.ParseInt(cursorData[1], 10, 64)
+		if err != nil {
+			logrus.WithError(err).Error("解析游标ID失败")
+			return
+		}
+
+		// 使用游标获取下一页
+		rows, err = s.db.Query(`
+			SELECT id, request_id, domain, query_type, client_ip,
+				   server, is_china_dns, response_code, answer_count,
+				   total_time_ms, created_at, answers
+			FROM dns_queries
+			WHERE (created_at, id) < (?, ?)
+			ORDER BY created_at DESC, id DESC
+			LIMIT ?`,
+			cursorTime, cursorID, limit+1,
+		)
+	}
+
+	if err != nil {
+		logrus.WithError(err).Error("查询DNS记录失败")
+		return
+	}
+	defer rows.Close()
+
+	var queries []DNSQuery
+	var lastQuery *DNSQuery
+	for rows.Next() {
+		var q DNSQuery
+		var answersJSON string
+		err := rows.Scan(
+			&q.ID, &q.RequestID, &q.Domain, &q.QueryType, &q.ClientIP,
+			&q.Server, &q.IsChinaDNS, &q.ResponseCode, &q.AnswerCount,
+			&q.TotalTime, &q.CreatedAt, &answersJSON,
+		)
+		if err != nil {
+			logrus.WithError(err).Error("扫描DNS记录失败")
+			continue
+		}
+
+		err = json.Unmarshal([]byte(answersJSON), &q.Answers)
+		if err != nil {
+			logrus.WithError(err).Error("解析DNS应答失败")
+			continue
+		}
+
+		if len(queries) < limit {
+			queries = append(queries, q)
+			lastQuery = &q
+		}
+	}
+
+	// 构造下一页游标
+	var nextCursor string
+	if len(queries) == limit && lastQuery != nil {
+		nextCursor = fmt.Sprintf("%s_%d", lastQuery.CreatedAt.Format(time.RFC3339Nano), lastQuery.ID)
+	}
+
+	// 发送分页数据
+	s.sendWSMessage(conn, "queries", map[string]interface{}{
+		"data": queries,
+		"next_cursor": nextCursor,
+	})
 }
 
 func (s *Server) Start(addr string) error {
