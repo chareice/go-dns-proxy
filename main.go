@@ -68,6 +68,11 @@ func main() {
 						Usage: "数据目录路径",
 						Value: "./data",
 					},
+					&cli.StringFlag{
+						Name:  "chinaDomainListUrl",
+						Usage: "中国域名列表下载地址",
+						Value: "https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/refs/heads/master/accelerated-domains.china.conf",
+					},
 				},
 				Name:  "start",
 				Usage: "start a proxy dns server",
@@ -86,6 +91,8 @@ func main() {
 						ChinaServerAddr: c.String("chinaServer"),
 						OverSeaServerAddr: c.String("overSeaServer"),
 						DBPath:          filepath.Join(dataDir, "dns.db"),
+						DataDir:         dataDir,
+						ChinaDomainListUrl: c.String("chinaDomainListUrl"),
 					})
 					if err != nil {
 						return err
@@ -109,6 +116,7 @@ func main() {
 						"监听端口":   c.Int("port"),
 						"日志级别":   c.String("logLevel"),
 						"管理后台端口": c.Int("adminPort"),
+						"中国域名列表": c.String("chinaDomainListUrl"),
 					}).Info("服务器配置")
 
 					// 设置信号处理

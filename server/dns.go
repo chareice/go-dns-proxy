@@ -28,10 +28,12 @@ type DnsServer struct {
 }
 
 type NewServerOptions struct {
-	ListenPort      int
-	ChinaServerAddr string
-	OverSeaServerAddr string
-	DBPath          string
+	ListenPort         int
+	ChinaServerAddr    string
+	OverSeaServerAddr  string
+	DBPath            string
+	DataDir           string
+	ChinaDomainListUrl string
 }
 
 func NewDnsServer(options *NewServerOptions) (*DnsServer, error) {
@@ -52,11 +54,20 @@ func NewDnsServer(options *NewServerOptions) (*DnsServer, error) {
 	chinaResolver = createResolver(options.ChinaServerAddr)
 	overseaResolver = createResolver(options.OverSeaServerAddr)
 
+	chinaDomainService := domain.NewChinaDomainService()
+
+	// 如果提供了中国域名列表 URL，则下载并加载
+	if options.ChinaDomainListUrl != "" {
+		if err := chinaDomainService.DownloadAndLoadChinaDomainList(options.ChinaDomainListUrl, options.DataDir); err != nil {
+			log.WithError(err).Error("加载中国域名列表失败")
+		}
+	}
+
 	return &DnsServer{
 		listenConn:         conn,
 		chinaResolver:      chinaResolver,
 		overseaResolver:    overseaResolver,
-		chinaDomainService: domain.NewChinaDomainService(),
+		chinaDomainService: chinaDomainService,
 		db:                 db,
 		stopChan:          make(chan struct{}),
 	}, nil

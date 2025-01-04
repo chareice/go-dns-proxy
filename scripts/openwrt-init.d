@@ -12,6 +12,7 @@ get_config() {
     config_get admin_port $1 admin_port 8080
     config_get data_dir $1 data_dir "/etc/go-dns-proxy/data"
     config_get log_level $1 log_level "info"
+    config_get china_domain_list_url $1 china_domain_list_url "https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/refs/heads/master/accelerated-domains.china.conf"
 }
 
 start_service() {
@@ -30,7 +31,8 @@ start_service() {
         --chinaServer "$china_server" \
         --overSeaServer "$oversea_server" \
         --adminPort "$admin_port" \
-        --dataDir "$data_dir"
+        --dataDir "$data_dir" \
+        ${china_domain_list_url:+--chinaDomainListUrl "$china_domain_list_url"}
     
     procd_set_param respawn
     procd_set_param stdout 1
