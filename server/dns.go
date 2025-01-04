@@ -29,7 +29,6 @@ type DnsServer struct {
 
 type NewServerOptions struct {
 	ListenPort      int
-	ApiKey          string
 	ChinaServerAddr string
 	OverSeaServerAddr string
 	DBPath          string
@@ -57,7 +56,7 @@ func NewDnsServer(options *NewServerOptions) (*DnsServer, error) {
 		listenConn:         conn,
 		chinaResolver:      chinaResolver,
 		overseaResolver:    overseaResolver,
-		chinaDomainService: domain.NewChinaDomainService(options.ApiKey, db),
+		chinaDomainService: domain.NewChinaDomainService(),
 		db:                 db,
 		stopChan:          make(chan struct{}),
 	}, nil

@@ -49,11 +49,6 @@ func main() {
 						Required: true,
 					},
 					&cli.StringFlag{
-						Name:     "apiKey",
-						Usage:    "apiKey for query beian domain",
-						Required: true,
-					},
-					&cli.StringFlag{
 						Name:  "chinaServer",
 						Usage: "国内 DNS 服务地址（支持普通 DNS、DOH 和 DOT）",
 						Value: "120.53.53.53",
@@ -88,7 +83,6 @@ func main() {
 					// 初始化 DNS 服务器
 					dnsServer, err := server.NewDnsServer(&server.NewServerOptions{
 						ListenPort:      c.Int("port"),
-						ApiKey:          c.String("apiKey"),
 						ChinaServerAddr: c.String("chinaServer"),
 						OverSeaServerAddr: c.String("overSeaServer"),
 						DBPath:          filepath.Join(dataDir, "dns.db"),
