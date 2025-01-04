@@ -105,7 +105,7 @@ func (s *ChinaDomainService) IsChinaDomain(ctx context.Context, domain string) b
 
 	// 检查缓存
 	var isBeian bool
-	err := s.db.QueryRowContext(ctx, "SELECT is_beian FROM beian_cache WHERE domain = ? AND updated_at > datetime('now', '-24 hours')", mainDomain).Scan(&isBeian)
+	err := s.db.QueryRowContext(ctx, "SELECT is_beian FROM beian_cache WHERE domain = ?", mainDomain).Scan(&isBeian)
 	if err == nil {
 		logger.WithFields(log.Fields{
 			"domain": mainDomain,
